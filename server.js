@@ -7,7 +7,8 @@ app.use(express.json());
 app.post("/speak", async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) {
+
+    if (!text || !text.trim()) {
       return res.status(400).json({ error: "No text provided" });
     }
 
@@ -20,7 +21,7 @@ app.post("/speak", async (req, res) => {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
-          text,
+          text: text.trim(),
           lang: "ru-RU",
           voice: "alena",
           format: "mp3",
@@ -33,11 +34,13 @@ app.post("/speak", async (req, res) => {
       return res.status(500).json({ error: err });
     }
 
-    const buffer = await yandexRes.arrayBuffer();
-    res.set("Content-Type", "audio/mpeg");
-    res.send(Buffer.from(buffer));
+    const buffer = Buffer.from(await yandexRes.arrayBuffer());
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
   } catch (e) {
-    res.status(500).json({ error: e.toString() });
+    res.status(500).json({ error: e.message });
   }
 });
 
