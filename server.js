@@ -4,19 +4,64 @@ import fetch from "node-fetch";
 const app = express();
 app.use(express.json());
 
+// ---- КОНФИГУРАЦИЯ ----
+
+// допустимые голоса Алисы
+const ALLOWED_VOICES = new Set([
+  "alena",
+  "oksana",
+  "jane",
+  "filipp",
+  "ermil",
+  "zahar",
+]);
+
+// допустимые эмоции
+const ALLOWED_EMOTIONS = new Set([
+  "neutral",
+  "good",
+  "evil",
+]);
+
+// значения по умолчанию
+const DEFAULT_VOICE = "alena";
+const DEFAULT_EMOTION = "neutral";
+const DEFAULT_SPEED = 1.0;
+
+// допустимый диапазон скорости
+const MIN_SPEED = 0.5;
+const MAX_SPEED = 1.5;
+
+// ---- ENDPOINT ----
+
 app.post("/speak", async (req, res) => {
   try {
-    const {
-      text,
-      voice,   // 👈 НОВОЕ
-      emotion, // 👈 НОВОЕ
-      speed,   // 👈 НОВОЕ
-    } = req.body;
+    let { text, voice, emotion, speed } = req.body;
 
-    if (!text || !text.trim()) {
+    // ---- text ----
+    if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ error: "No text provided" });
     }
+    text = text.trim();
 
+    // ---- voice ----
+    if (!ALLOWED_VOICES.has(voice)) {
+      voice = DEFAULT_VOICE;
+    }
+
+    // ---- emotion ----
+    if (!ALLOWED_EMOTIONS.has(emotion)) {
+      emotion = DEFAULT_EMOTION;
+    }
+
+    // ---- speed ----
+    speed = Number(speed);
+    if (Number.isNaN(speed)) {
+      speed = DEFAULT_SPEED;
+    }
+    speed = Math.min(Math.max(speed, MIN_SPEED), MAX_SPEED);
+
+    // ---- запрос к Яндексу ----
     const yandexRes = await fetch(
       "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize",
       {
@@ -26,11 +71,11 @@ app.post("/speak", async (req, res) => {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
-          text: text.trim(),
+          text,
           lang: "ru-RU",
-          voice: voice || "alena",        // ✅ ВЫБОР ГОЛОСА
-          emotion: emotion || "neutral",  // ✅ ЭМОЦИЯ
-          speed: speed || "1.0",          // ✅ СКОРОСТЬ
+          voice,
+          emotion,
+          speed: speed.toString(),
           format: "mp3",
         }),
       }
@@ -50,6 +95,8 @@ app.post("/speak", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ---- SERVER ----
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
