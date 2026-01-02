@@ -1,8 +1,31 @@
 import express from "express";
 import fetch from "node-fetch";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 app.use(express.json());
+
+// ---------- RATE LIMIT ----------
+
+const speakLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 минута
+  max: 20,             // 20 запросов
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.log(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        ip: req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+        status: "rate_limited",
+      })
+    );
+    res.status(429).json({ error: "Too many requests" });
+  },
+});
+
+// применяем ТОЛЬКО к /speak
+app.post("/speak", speakLimiter);
 
 // ---------- КОНФИГ ----------
 
@@ -28,7 +51,6 @@ const DEFAULT_SPEED = 1.0;
 const MIN_SPEED = 0.5;
 const MAX_SPEED = 1.5;
 
-// 📏 лимит текста
 const MAX_TEXT_CHARS = 300;
 
 // ---------- УТИЛИТЫ ----------
@@ -37,7 +59,6 @@ function logEvent(data) {
   console.log(JSON.stringify(data));
 }
 
-// аккуратная обрезка по словам
 function trimText(text, maxChars) {
   if (text.length <= maxChars) {
     return { text, trimmed: false };
@@ -45,9 +66,7 @@ function trimText(text, maxChars) {
 
   const cut = text.slice(0, maxChars);
   const lastSpace = cut.lastIndexOf(" ");
-
-  const safeText =
-    lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+  const safeText = lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
 
   return {
     text: safeText + "…",
@@ -84,10 +103,9 @@ app.post("/speak", async (req, res) => {
 
     text = text.trim();
 
-    // ✂️ ограничение длины
-    const trimmedResult = trimText(text, MAX_TEXT_CHARS);
-    text = trimmedResult.text;
-    logData.trimmed = trimmedResult.trimmed;
+    const trimmed = trimText(text, MAX_TEXT_CHARS);
+    text = trimmed.text;
+    logData.trimmed = trimmed.trimmed;
 
     // ---- voice ----
     if (!ALLOWED_VOICES.has(voice)) {
