@@ -6,7 +6,12 @@ app.use(express.json());
 
 app.post("/speak", async (req, res) => {
   try {
-    const { text } = req.body;
+    const {
+      text,
+      voice,   // 👈 НОВОЕ
+      emotion, // 👈 НОВОЕ
+      speed,   // 👈 НОВОЕ
+    } = req.body;
 
     if (!text || !text.trim()) {
       return res.status(400).json({ error: "No text provided" });
@@ -23,7 +28,9 @@ app.post("/speak", async (req, res) => {
         body: new URLSearchParams({
           text: text.trim(),
           lang: "ru-RU",
-          voice: "alena",
+          voice: voice || "alena",        // ✅ ВЫБОР ГОЛОСА
+          emotion: emotion || "neutral",  // ✅ ЭМОЦИЯ
+          speed: speed || "1.0",          // ✅ СКОРОСТЬ
           format: "mp3",
         }),
       }
