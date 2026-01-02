@@ -28,11 +28,31 @@ const DEFAULT_SPEED = 1.0;
 const MIN_SPEED = 0.5;
 const MAX_SPEED = 1.5;
 
+// 📏 лимит текста
+const MAX_TEXT_CHARS = 300;
+
 // ---------- УТИЛИТЫ ----------
 
 function logEvent(data) {
-  // JSON-лог, удобен для Render / Loki / CloudWatch
   console.log(JSON.stringify(data));
+}
+
+// аккуратная обрезка по словам
+function trimText(text, maxChars) {
+  if (text.length <= maxChars) {
+    return { text, trimmed: false };
+  }
+
+  const cut = text.slice(0, maxChars);
+  const lastSpace = cut.lastIndexOf(" ");
+
+  const safeText =
+    lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+
+  return {
+    text: safeText + "…",
+    trimmed: true,
+  };
 }
 
 // ---------- ENDPOINT ----------
@@ -40,18 +60,13 @@ function logEvent(data) {
 app.post("/speak", async (req, res) => {
   const startedAt = Date.now();
 
-  let {
-    text,
-    voice,
-    emotion,
-    speed,
-  } = req.body;
+  let { text, voice, emotion, speed } = req.body;
 
-  // данные для лога
   const logData = {
     ts: new Date().toISOString(),
     ip: req.headers["x-forwarded-for"] || req.socket.remoteAddress,
     textLength: typeof text === "string" ? text.length : 0,
+    trimmed: false,
     voice,
     emotion,
     speed,
@@ -63,9 +78,16 @@ app.post("/speak", async (req, res) => {
     // ---- text ----
     if (!text || typeof text !== "string" || !text.trim()) {
       logData.status = "bad_request";
+      logEvent(logData);
       return res.status(400).json({ error: "No text provided" });
     }
+
     text = text.trim();
+
+    // ✂️ ограничение длины
+    const trimmedResult = trimText(text, MAX_TEXT_CHARS);
+    text = trimmedResult.text;
+    logData.trimmed = trimmedResult.trimmed;
 
     // ---- voice ----
     if (!ALLOWED_VOICES.has(voice)) {
@@ -114,12 +136,10 @@ app.post("/speak", async (req, res) => {
 
     const buffer = Buffer.from(await yandexRes.arrayBuffer());
 
-    // ---- ответ ----
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", buffer.length);
     res.send(buffer);
 
-    // ---- лог успеха ----
     logData.status = "ok";
     logData.durationMs = Date.now() - startedAt;
     logData.voice = voice;
